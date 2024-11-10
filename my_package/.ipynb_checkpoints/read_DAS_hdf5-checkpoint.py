@@ -1,8 +1,11 @@
 import h5py
 import numpy as np
 import sys
-from DAS_filtering import moving_average,define_butterworth_highpass,filtering,spectrogram
+import numpy as np
+from scipy.signal import butter, lfilter
+from scipy import signal
 from numpy.fft import fft, ifft
+import pathlib
 
 
 def load_single_DAS_file(file_name):
@@ -15,7 +18,7 @@ def load_single_DAS_file(file_name):
     return n22
 
 def list_hdf5_files_in_dir (file_path):
-    #file_path = pathlib.Path("C:\Kate captures/2024-04-18/100 lpm 60s 2")
+    file_path = pathlib.Path(file_path)
     list(file_path.iterdir())
     file_count = 0
     for item in file_path.iterdir():
@@ -31,7 +34,7 @@ def list_hdf5_files_in_dir (file_path):
 def load_multi_DAS_file(file_names, channels):
     count = 0
     data_DAS = np.zeros((len(file_names) * 200000, channels))
-
+    
     for i in range(len(file_names)):
         file_name = file_names[i]
         initial_filter_conditions = None
@@ -115,9 +118,45 @@ def generate_training_set_spectrogram(DAS_fitlered_data, channel_start, channel_
 
             spectro_data.append(spectro_5_channels)
         #if time % 100000 == 0:
-            print(time)
+            #print(time)
 
     spectro_data_numpy = np.array(spectro_data)
 
     return spectro_data_numpy
+
+
+def moving_average(a, n=3):
+    ret = np.cumsum(a, dtype=float)
+    ret[n:] = ret[n:] - ret[:-n]
+    return ret[n - 1:] / n
+
+# filtering
+def define_butterworth_highpass(cutoff, Fs):
+    nyquist = Fs / 2
+    order = 3
+    normal_cutoff = cutoff / nyquist
+    b, a = butter(order, normal_cutoff, btype='high', output='ba', analog=False)
+    sos = butter(order, normal_cutoff, btype='high', output='sos', analog=False)
+    return b, a, sos
+
+def filtering(phase, phase_filtered_total, initial_filter_conditions, Fs, filter_cutoff_frequency):
+    b, a, sos = define_butterworth_highpass(cutoff=filter_cutoff_frequency, Fs=Fs)
+
+    if initial_filter_conditions is None:
+        filtered_data = lfilter(b, a, phase, axis=0)
+        phase_filtered_total = filtered_data
+        initial_filter_conditions = True
+    else:
+        filtered_data = lfilter(b, a, phase, axis=0)
+        phase_filtered_total = np.concatenate((phase_filtered_total, filtered_data), axis=0)
+
+    return phase_filtered_total
+
+
+def spectrogram(phase_filtered_total, fs):
+    f, t, Sxx = signal.spectrogram(phase_filtered_total, fs)
+    a = Sxx[0:29, :]
+    row_sums = a.sum(axis=1)
+    new_matrix = a / row_sums.sum()
+    return new_matrix
 
