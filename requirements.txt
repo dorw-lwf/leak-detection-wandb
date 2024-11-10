@@ -13,3 +13,4 @@ scikit-learn
 keras
 tensorflow==2.7.0
 protobuf==3.20.2
+wandb
